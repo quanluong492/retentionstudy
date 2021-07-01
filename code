@@ -1,0 +1,215 @@
+setwd("D:/Tiki_All_in_One/DM Team/PROJECTS/Retention Study/final/Aug/one_order")
+library(dbConnect)
+library(RMySQL)
+library(plyr)
+library(dplyr)
+con1 <- dbConnect(MySQL(),user = "datateam",
+                  password = "ly0uakgxen3sr4js",
+                  host = "10.20.30.17", port = 3333,
+                  dbname="tiki_web")
+con3 <- dbConnect(MySQL(),user = "datateam",
+                  password = "ly0uakgxen3sr4js",
+                  host = "10.20.30.17", port = 3333,
+                  dbname="tiki_da")
+## first category of one order group ------------
+rs.one.order <- dbSendQuery(con1, "SELECT
+o.customer_id  		
+                          ,sum(if(m.id = 1, 1, 0)) first_Books_English
+                          ,sum(if(m.id = 2, 1, 0)) first_Toys
+                          ,sum(if(m.id = 3, 1, 0)) first_Fashion
+                          ,sum(if(m.id = 4, 1, 0)) first_EL_accessories
+                          ,sum(if(m.id = 5, 1, 0)) first_Home_appliances
+                          ,sum(if(m.id = 6, 1, 0)) first_Beauty_health
+                          ,sum(if(m.id = 9, 1, 0)) first_Baby
+                          ,sum(if(m.id = 10, 1, 0)) first_Phone_tablets
+                          ,sum(if(m.id = 11, 1, 0)) first_Office_supplies
+                          ,sum(if(m.id = 12, 1, 0)) first_FMCG
+                          ,sum(if(m.id = 13, 1, 0)) first_Souvenirs
+                          ,sum(if(m.id = 15, 1, 0)) first_Dien_lanh
+                          ,sum(if(m.id = 16, 1, 0)) first_Sport
+                          ,sum(if(m.id = 17, 1, 0)) first_Home_living
+                          ,sum(if(m.id = 18, 1, 0)) first_Laptop_PC
+                          ,sum(if(m.id = 19, 1, 0)) first_TV_audio
+                          ,sum(if(m.id = 20, 1, 0)) first_Camera
+                          ,sum(if(m.id = 21, 1, 0)) first_IT
+                          ,sum(if(m.id = 22, 1, 0)) first_Books_Vietnamese
+                          
+                          ,sum(if(m.id = 1, oi.row_total, 0)) rev_Books_English
+                          ,sum(if(m.id = 2, oi.row_total, 0)) rev_Toys
+                          ,sum(if(m.id = 3, oi.row_total, 0)) rev_Fashion
+                          ,sum(if(m.id = 4, oi.row_total, 0)) rev_EL_accessories
+                          ,sum(if(m.id = 5, oi.row_total, 0)) rev_Home_appliances
+                          ,sum(if(m.id = 6, oi.row_total, 0)) rev_Beauty_health
+                          ,sum(if(m.id = 9, oi.row_total, 0)) rev_Baby
+                          ,sum(if(m.id = 10, oi.row_total, 0)) rev_Phone_tablets
+                          ,sum(if(m.id = 11, oi.row_total, 0)) rev_Office_supplies
+                          ,sum(if(m.id = 12, oi.row_total, 0)) rev_FMCG
+                          ,sum(if(m.id = 13, oi.row_total, 0)) rev_Souvenirs
+                          ,sum(if(m.id = 15, oi.row_total, 0)) rev_Dien_lanh
+                          ,sum(if(m.id = 16, oi.row_total, 0)) rev_Sport
+                          ,sum(if(m.id = 17, oi.row_total, 0)) rev_Home_living
+                          ,sum(if(m.id = 18, oi.row_total, 0)) rev_Laptop_PC
+                          ,sum(if(m.id = 19, oi.row_total, 0)) rev_TV_audio
+                          ,sum(if(m.id = 20, oi.row_total, 0)) rev_Camera
+                          ,sum(if(m.id = 21, oi.row_total, 0)) rev_IT
+                          ,sum(if(m.id = 22, oi.row_total, 0)) rev_Books_Vietnamese
+                          FROM
+                          (SELECT
+                          o.customer_id,
+                          min(COALESCE(original_o.entity_id,
+                          original_o_pre_adjust.entity_id,
+                          o_pre_adjust.entity_id,
+                          o.`entity_id`)) original_entity_id,
+                          COALESCE(original_o.created_at,
+                          original_o_pre_adjust.created_at,
+                          o_pre_adjust.created_at,
+                          o.created_at) created_at
+                          FROM
+                          sales_flat_order o
+                          LEFT JOIN
+                          sales_flat_order o_pre_adjust ON o.original_increment_id = o_pre_adjust.increment_id
+                          LEFT JOIN
+                          sales_flat_order original_o ON o.original_code = original_o.`increment_id`
+                          LEFT JOIN
+                          sales_flat_order original_o_pre_adjust ON o_pre_adjust.original_code = original_o_pre_adjust.`increment_id`
+                          where COALESCE(original_o.created_at,
+                          original_o_pre_adjust.created_at,
+                          o_pre_adjust.created_at,
+                          o.created_at) < '2016-09-01 00:00:00'
+                          and o.`status` in ('complete','giao_hang_thanh_cong')
+                          GROUP BY customer_id) o
+                          JOIN sales_flat_order_item oi on o.original_entity_id = oi.order_id
+                          JOIN catalog_product_entity cpe on oi.product_id = cpe.entity_id
+                          JOIN tiki_attribute_set_by_merchants asbm on asbm.attribute_set_id = cpe.attribute_set_id
+                          JOIN tiki_merchants m on asbm.merchant_id = m.id
+                          JOIN tiki_da.one_order_aug a on o.customer_id = a.customer_id
+                          GROUP BY o.customer_id
+                          
+                          ")
+one.order <- fetch(rs.one.order, n = -1)
+
+## rfm of one order group -------------
+
+rs.rfm.one.order <- dbSendQuery(con1, "SELECT
+o.customer_id
+                                , TIMESTAMPDIFF(week,o.created_at,'2016-08-31 23:59:59') recency
+                                , sum(grand_total) monetary
+                                , TIMESTAMPDIFF(week,c.created_at,'2016-08-31 23:59:59') length
+                                FROM sales_flat_order o
+                                JOIN customer_entity c on o.customer_id = c.entity_id
+                                JOIN
+                                tiki_da.one_order_aug a on o.customer_id = a.customer_id
+                                
+                                WHERE o.created_at < '2016-09-01 00:00:00'
+                                and `status` in ('complete', 'giao_hang_thanh_cong')
+                                GROUP BY customer_id")
+rfm.one.order <- fetch(rs.rfm.one.order, n = -1)
+## churn of one order group ----------
+rs.one.order.churn <- dbSendQuery(con1, "SELECT  a.customer_id, 
+                                   CASE WHEN o.customer_id is not NULL then 0 ELSE 1 END churn_next_3_months
+                                   
+                                   FROM tiki_da.one_order_aug a 
+                                   LEFT JOIN 
+                                   (SELECT DISTINCT customer_id 
+                                   FROM
+                                   sales_flat_order
+                                   
+                                   WHERE created_at BETWEEN '2016-09-01 00:00:00' and '2016-12-01 00:00:00'
+                                   AND `status` in ('complete', 'giao_hang_thanh_cong')) o on a.customer_id = o.customer_id")
+
+one.order.churn <- fetch(rs.one.order.churn, n = -1)
+
+one.order.way1 <- join_all(dfs = list(one.order, one.order.churn)) # by customers features
+
+one.order.way2 <- merge(rfm.one.order, one.order.churn, by = "customer_id", all.y = T) # by rfm
+one.order[,2:20] <- ifelse(one.order[,2:20] > 0, 1, 0)
+
+## Variables way 1--------------
+
+## way 1 glm method
+set.seed(1234)
+one.training.id <- sample(nrow(one.order)*0.7)
+one.order.way1.training <- one.order.way1[one.training.id,]
+one.order.way1.test <- one.order.way1[-one.training.id,]
+one.way1.glm <- glm(churn_next_3_months ~ first_Books_English + first_Toys + first_Fashion + first_EL_accessories
+               + first_Home_appliances + first_Beauty_health + first_Baby + first_Phone_tablets + first_Office_supplies
+               + first_FMCG + first_Souvenirs + first_Office_supplies + first_FMCG + first_Souvenirs + first_Dien_lanh
+               + first_Sport + first_Home_living + first_Laptop_PC + first_TV_audio + first_Home_living + first_Laptop_PC
+               + first_TV_audio + first_Camera + first_IT + first_Books_Vietnamese + rev_Books_English
+               + rev_Toys + rev_Fashion + rev_EL_accessories + rev_Home_appliances + rev_Beauty_health + rev_Baby + rev_Phone_tablets
+               + rev_Office_supplies + rev_FMCG + rev_Souvenirs + rev_Dien_lanh + rev_Sport + rev_Home_living + rev_Laptop_PC
+               + rev_TV_audio + rev_Camera + rev_IT + rev_Books_Vietnamese, data = one.order.way1.training, family = "binomial")
+one.order.way1.test$churn_glm <- predict.glm(one.way1.glm, one.order.way1.test)
+library(randomForest)
+#way 1 Random Forest method
+one.way1.forest <- randomForest(churn_next_3_months ~ first_Books_English + first_Toys + first_Fashion + first_EL_accessories
+                     + first_Home_appliances + first_Beauty_health + first_Baby + first_Phone_tablets + first_Office_supplies
+                     + first_FMCG + first_Souvenirs + first_Office_supplies + first_FMCG + first_Souvenirs + first_Dien_lanh
+                     + first_Sport + first_Home_living + first_Laptop_PC + first_TV_audio + first_Home_living + first_Laptop_PC
+                     + first_TV_audio + first_Camera + first_IT + first_Books_Vietnamese + rev_Books_English
+                     + rev_Toys + rev_Fashion + rev_EL_accessories + rev_Home_appliances + rev_Beauty_health + rev_Baby + rev_Phone_tablets
+                     + rev_Office_supplies + rev_FMCG + rev_Souvenirs + rev_Dien_lanh + rev_Sport + rev_Home_living + rev_Laptop_PC
+                     + rev_TV_audio + rev_Camera + rev_IT + rev_Books_Vietnamese, data = one.order.way1.training, importance = TRUE)
+one.order.way1.test$churn_forest <- predict(one.way1.forest, one.order.way1.test)
+pct.churn.one.order <- sum(one.order.way1.test$churn_next_3_months)/ length(one.order.way1.test$churn_next_3_months)
+one.order.way1.test$churn_final <- ifelse(one.order.way1.test$churn_glm >= quantile(one.order.way1.test$churn_glm, 1 - pct.churn.one.order)
+                                           & one.order.way1.test$churn_forest >= quantile(one.order.way1.test$churn_forest, 1 - pct.churn.one.order)
+                                           ,1,0)
+## calculate percentage of churn, accuracy
+pct.pred.as.churn.way1 <- sum(one.order.way1.test$churn_final) / length(one.order.way1.test$churn_final)
+pct.churn.pred.as.churn.way1 <- sum(one.order.way1.test$churn_final == 1 & one.order.way1.test$churn_next_3_months == 1) / sum(one.order.way1.test$churn_next_3_months)
+bayes.way1 <- pct.churn.pred.as.churn.way1 * pct.churn.one.order / pct.pred.as.churn.way1
+
+## Variables way 2------------------------
+#way 2 glm method
+one.order.way2.training <- one.order.way2[one.training.id,]
+one.order.way2.test <- one.order.way2[-one.training.id,]
+one.way2.glm <- glm(churn_next_3_months ~ recency + monetary + length, data = one.order.way2.training, family = "binomial")
+one.order.way2.test$churn_glm <- predict.glm(one.way2.glm, one.order.way2.test)
+
+#way 2 Random Forest method
+one.way2.forest <- randomForest(churn_next_3_months ~ recency + monetary + length, data = one.order.way2.training, importance = TRUE)
+one.order.way2.test$churn_forest <- predict(one.way2.forest, one.order.way2.test)
+
+one.order.way2.test$churn_final <- ifelse(one.order.way2.test$churn_glm >= quantile(one.order.way2.test$churn_glm, 1 - pct.churn.one.order)
+                                           & one.order.way2.test$churn_forest >= quantile(one.order.way2.test$churn_forest, 1 - pct.churn.one.order)
+                                           ,1,0)
+pct.pred.as.churn.way2 <- sum(one.order.way2.test$churn_final) / length(one.order.way2.test$churn_final)
+pct.churn.pred.as.churn.way2 <- sum(one.order.way2.test$churn_final == 1 & one.order.way2.test$churn_next_3_months == 1) / sum(one.order.way2.test$churn_next_3_months)
+bayes.way2 <- pct.churn.pred.as.churn.way2 * pct.churn.one.order / pct.pred.as.churn.way2
+
+
+#calculate accuracy----------------
+#number of churners 
+a1 <- sum(one.order.way1.test$churn_next_3_months == 1)
+a2 <- sum(one.order.way2.test$churn_next_3_months == 1)
+#total number of people
+b1 <- length(one.order.way1.test$churn_next_3_months)
+b2 <- length(one.order.way2.test$churn_next_3_months)
+#number of people predicted to churn
+c1 <- sum(one.order.way1.test$churn_final)
+c2 <- sum(one.order.way2.test$churn_final)
+#number of churners predicted to churn
+d1 <- sum(one.order.way1.test$churn_final == 1 & one.order.way1.test$churn_next_3_months == 1)
+d2 <- sum(one.order.way2.test$churn_final == 1 & one.order.way2.test$churn_next_3_months == 1)
+
+#pct.churn.one.order
+e1 <- a1/b1
+e2 <- a2/b2
+
+#pct.churn.pred.as.churn.way1
+f1 <- d1/a1
+f2 <- d2/a2
+
+#pct.pred.as.churn.way1
+g1 <- c1/b1
+g2 <- c2/b2
+
+#bayes
+bayes1 <- f1 * e1 / g1
+bayes2 <- f2 * e2 / g2
+
+way1 <- c(a1,b1,c1,d1,e1,f1,g1,bayes1)
+way2 <- c(a2,b2,c2,d2,e2,f2,g2,bayes2)
+result <- data.frame(way1, way2)
+  
